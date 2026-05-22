@@ -11,8 +11,23 @@ if (process.env.DATABASE_URL) {
   // Use PostgreSQL (Supabase)
   const { Pool } = require('pg');
   const dns = require('dns');
+  
+  let connectionString = process.env.DATABASE_URL;
+  
+  // Auto-rewrite direct Supabase host to IPv4 pooler to prevent ENETUNREACH on IPv4-only environments like Render
+  if (connectionString && connectionString.includes('db.ckaeepxwzzxcbzpvrwdh.supabase.co')) {
+    console.log('Detected IPv6-only Supabase host. Auto-routing connection through IPv4 pooler (aws-0-eu-west-3.pooler.supabase.com:6543)...');
+    connectionString = connectionString.replace(
+      'db.ckaeepxwzzxcbzpvrwdh.supabase.co:5432',
+      'aws-0-eu-west-3.pooler.supabase.com:6543'
+    ).replace(
+      'db.ckaeepxwzzxcbzpvrwdh.supabase.co',
+      'aws-0-eu-west-3.pooler.supabase.com'
+    );
+  }
+
   pgPool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString,
     ssl: {
       rejectUnauthorized: false // Required for Supabase standard connections
     },
