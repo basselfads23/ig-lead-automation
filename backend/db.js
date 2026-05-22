@@ -15,7 +15,7 @@ if (process.env.DATABASE_URL) {
   let connectionString = process.env.DATABASE_URL;
   
   // Auto-rewrite direct Supabase host to IPv4 pooler to prevent ENETUNREACH on IPv4-only environments like Render
-  const supabaseRegex = /postgresql:\/\/(.*?)(:.*?)?@db\.(.*?)\.supabase\.co/i;
+  const supabaseRegex = /^(?:postgresql|postgres):\/\/(.*?)(:.*?)?@db\.(.*?)\.supabase\.co/i;
   const match = connectionString ? connectionString.match(supabaseRegex) : null;
   
   if (match) {
@@ -44,8 +44,27 @@ if (process.env.DATABASE_URL) {
     }
   }
 
-  pgPool = new Pool({
-    connectionString,
+  // Parse connection string manually to prevent pg-connection-string / URL parser crashes with special character passwords
+  const parseConnectionString = (str) => {
+    const regex = /^(?:postgresql|postgres):\/\/(.*?):(.*?)@([^@\/:]+)(?::(\d+))?\/(.+)$/;
+    const m = str.match(regex);
+    if (!m) return null;
+    let password = m[2];
+    try {
+      password = decodeURIComponent(password);
+    } catch (e) {
+      // Use raw password if decode fails
+    }
+    return {
+      user: m[1],
+      password: password,
+      host: m[3],
+      port: m[4] ? parseInt(m[4], 10) : 5432,
+      database: m[5]
+    };
+  };
+
+  const poolConfig = {
     ssl: {
       rejectUnauthorized: false // Required for Supabase standard connections
     },
@@ -53,7 +72,18 @@ if (process.env.DATABASE_URL) {
     lookup: (hostname, options, callback) => {
       dns.lookup(hostname, { ...options, family: 4 }, callback);
     }
-  });
+  };
+
+  const parsedParams = parseConnectionString(connectionString);
+  if (parsedParams) {
+    console.log(`Successfully parsed database credentials directly to prevent URL encoding issues.`);
+    Object.assign(poolConfig, parsedParams);
+  } else {
+    console.log(`Using fallback connectionString parameter.`);
+    poolConfig.connectionString = connectionString;
+  }
+
+  pgPool = new Pool(poolConfig);
   isPostgres = true;
   console.log('Connecting to PostgreSQL database via DATABASE_URL...');
 
