@@ -10,10 +10,15 @@ let sqliteDb = null;
 if (process.env.DATABASE_URL) {
   // Use PostgreSQL (Supabase)
   const { Pool } = require('pg');
+  const dns = require('dns');
   pgPool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
       rejectUnauthorized: false // Required for Supabase standard connections
+    },
+    // Force IPv4 to prevent ENETUNREACH IPv6 connection issues on Render
+    lookup: (hostname, options, callback) => {
+      dns.lookup(hostname, { ...options, family: 4 }, callback);
     }
   });
   isPostgres = true;

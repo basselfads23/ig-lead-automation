@@ -8,7 +8,7 @@
     "server:watch": "nodemon backend/server.js",
     "client": "vite --port 3000 --host",
     "dev": "concurrently --kill-others \"npm run server\" \"npm run client\"",
-    "build": "vite build --outDir dist"
+    "build": "vite build"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.0",
