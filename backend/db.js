@@ -15,15 +15,33 @@ if (process.env.DATABASE_URL) {
   let connectionString = process.env.DATABASE_URL;
   
   // Auto-rewrite direct Supabase host to IPv4 pooler to prevent ENETUNREACH on IPv4-only environments like Render
-  if (connectionString && connectionString.includes('db.ckaeepxwzzxcbzpvrwdh.supabase.co')) {
-    console.log('Detected IPv6-only Supabase host. Auto-routing connection through IPv4 pooler (aws-0-eu-west-3.pooler.supabase.com:6543)...');
+  const supabaseRegex = /postgresql:\/\/(.*?)(:.*?)?@db\.(.*?)\.supabase\.co/i;
+  const match = connectionString ? connectionString.match(supabaseRegex) : null;
+  
+  if (match) {
+    const username = match[1];
+    const projectRef = match[3];
+    console.log(`Detected direct Supabase host. Auto-routing connection through IPv4 pooler for project: ${projectRef}...`);
+    
+    // Rewrite host to transaction pooler
     connectionString = connectionString.replace(
-      'db.ckaeepxwzzxcbzpvrwdh.supabase.co:5432',
-      'aws-0-eu-west-3.pooler.supabase.com:6543'
+      `db.${projectRef}.supabase.co:5432`,
+      `aws-0-eu-west-3.pooler.supabase.com:6543`
     ).replace(
-      'db.ckaeepxwzzxcbzpvrwdh.supabase.co',
-      'aws-0-eu-west-3.pooler.supabase.com'
+      `db.${projectRef}.supabase.co`,
+      `aws-0-eu-west-3.pooler.supabase.com`
     );
+    
+    // Append the tenant ID to the username to resolve the multi-tenant routing issue
+    if (username && !username.includes(projectRef)) {
+      connectionString = connectionString.replace(
+        `://${username}:`,
+        `://${username}.${projectRef}:`
+      ).replace(
+        `://${username}@`,
+        `://${username}.${projectRef}@`
+      );
+    }
   }
 
   pgPool = new Pool({
